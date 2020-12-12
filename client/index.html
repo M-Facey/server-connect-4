@@ -1,0 +1,226 @@
+<html lang="en">
+<head>
+    <title>Multiplayer Connect-4 Game</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/3.0.1/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0px;
+            padding: 0px;
+            box-sizing: border-box;
+        }
+
+        body {
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+
+        }
+
+        #board {
+            width: 650px;
+            padding: 15px 10px;
+            background-color: #4b5cf3; 
+            border-radius: 30px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .col {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .col:hover {
+            background-color: #32ebb09a;
+            border-radius: 10px;
+        }
+
+        .row {
+            width: 65px;
+            height: 65px;
+            margin: 5px 11px;
+            border-radius: 50%;
+            border: 6px solid #2c368c;
+            background-color: white;
+            display: inline-block;
+        }
+
+        .row-4 {
+            width: 45px;
+            height: 45px;
+        }
+
+        .next-red {
+            background-color: rgba(220, 20, 60, 0.877);
+        }
+
+        .next-black {
+            background-color: rgba(64, 64, 64, 0.877);
+        }
+
+        .red {
+            background-color: crimson;
+            border: 6px solid rgba(49, 49, 49, 0.347);
+        }
+
+        .black {
+            background-color: rgb(64, 64, 64);
+            border: 6px solid rgba(0, 0, 0, 0.721);
+        }
+
+        .green {
+            background-color: rgb(116, 238, 16);
+            border: 6px solid rgba(42, 170, 31, 0.347);
+        }
+
+        .yellow {
+            background-color: rgb(255, 251, 0);
+            border: 6px solid rgba(198, 201, 40, 0.347);
+        }
+    </style>
+</head>
+<body>
+    <div id="game">
+        <div class="splash">
+            <button id="one-player" class="game-mode">One Player</button>
+            <button id="two-player" class="game-mode">Two Players</button>
+            <button id="four-player" class="game-mode">Four Player</button>
+        </div>
+    </div>
+    <script>
+        // --------------------------
+        //       Game Variables
+        // --------------------------
+        const isGameOver = false;
+        const GAME = document.getElementById('game');
+        const TIMER = document.createElement('div');
+        const GAME_MODES = document.querySelectorAll('.game-mode');
+        var GAME_MODE = '';
+        const SPLASH = document.querySelector('.splash');
+
+        var PLAYER = '';
+        var CURRENT_PLAYER = '';
+        
+        var socket = io();
+
+        GAME_MODES.forEach(game_mode => {
+            game_mode.addEventListener('click', () => {
+                GAME_MODE = game_mode.id;
+                socket.emit('game mode', game_mode.id);
+            });
+        });
+
+        socket.on('start game', (data) => {
+            GAME.innerHTML = '';
+            console.log(data);
+            const { row, col, player, current, mode } = data;
+            PLAYER = player;
+            CURRENT_PLAYER = current;
+            GAME_MODE = mode;
+            createGrid(row, col);
+        });
+
+        socket.on('update', (data) => {
+            console.log(data);
+            const { coords: {i, j}, play} = data;
+            const cell = document.querySelector(`.row[data-col='${j}'][data-row='${i}']`);
+            cell.classList.add(play);
+            document.getElementById('current').innerText = play;
+        });
+
+        socket.on('game over', (data) => {
+            alert(`Game Over! Player ${data.winner} wins!`);
+            isGameOver = data.game_over;
+        });
+
+        socket.on('current player', (data) => {
+            document.getElementById('current').innerText = data.current;
+        });
+
+        socket.on('reset game', (data) => {
+            console.log(data);
+            const { plays } = data; 
+            for(var play of plays) {
+                var items = document.querySelectorAll(`.${play}`);
+                for(var item of items) {
+                    item.classList.remove(play);
+                }
+            }
+        });
+
+        socket.on('update time', (data) => {
+            const { mins, secs } = data;
+            TIMER.textContent = `${mins}:${secs}`;
+        });
+
+        function createGrid(ROWS, COLS) {
+            var TITLE_BAR;
+              
+            if(GAME_MODE === 'one-player') {
+                TITLE_BAR = `<div>
+                    <p>TURN: <span id='current'>${CURRENT_PLAYER}</span></p>
+                </div>
+                `;
+            } else {
+                TITLE_BAR = `<div>
+                    <p>Player: <span>${PLAYER}</span></p>
+                    <p>TURN: <span id='current'>${CURRENT_PLAYER}</span></p>
+                </div>
+                `;
+            }
+
+            GAME.innerHTML += TITLE_BAR;
+            
+            const BOARD = document.createElement('div');
+            if(GAME_MODE === 'four-player'){
+                BOARD.style.width = '700px';
+            }
+            BOARD.id = 'board';
+
+            for(let col = 0; col < COLS; col++) {
+                const col_div = document.createElement('div');
+                col_div.classList.add('col');
+                for(let row = 0; row < ROWS; row++) {
+                    var row_div = document.createElement('div');
+                    if (GAME_MODE === 'four-player')
+                        row_div.classList.add('row-4');
+                    row_div.classList.add('row');
+                    row_div.setAttribute('data-col', col);
+                    row_div.setAttribute('data-row', row);
+                    col_div.append(row_div); 
+                }
+                BOARD.append(col_div);
+            }
+            GAME.append(BOARD);
+
+            const FOOTER = document.createElement('div');
+
+            const RESET_BTN = document.createElement('button');
+            RESET_BTN.textContent = 'Reset Game';
+            
+            RESET_BTN.addEventListener('click', () => {
+                socket.emit('reset', {});
+            });
+            FOOTER.append(RESET_BTN, TIMER);
+            GAME.append(FOOTER);
+
+            handleInput();
+        }
+
+        function handleInput() {
+            const cols = document.querySelectorAll('.col');
+            cols.forEach(col => {
+                col.addEventListener('click', () => {
+                    if(isGameOver)
+                        return;
+                    socket.emit('add player', {
+                        col: col.querySelector('.row').getAttribute('data-col')
+                    });
+                });
+            });
+        }
+    </script>
+</body>
+</html>
